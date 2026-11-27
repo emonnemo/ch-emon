@@ -1,0 +1,17 @@
+# Optional Docker Compose fallback if you later want containerized PostgreSQL
+# instead of local Homebrew postgresql@14.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: chemon-postgres
+    environment:
+      POSTGRES_USER: chemon
+      POSTGRES_PASSWORD: chemon_dev_password
+      POSTGRES_DB: chemon
+    ports:
+      - "5432:5432"
+    volumes:
+      - chemon_pgdata:/var/lib/postgresql/data
+
+volumes:
+  chemon_pgdata:
