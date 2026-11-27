@@ -111,7 +111,18 @@ def main() -> None:
         action="store_true",
         help="Clear and reimport dictionary_entries even if already populated.",
     )
+    parser.add_argument(
+        "--download-only",
+        action="store_true",
+        help="Only download the CC-CEDICT archive locally without touching the database.",
+    )
     args = parser.parse_args()
+    if args.download_only:
+        if not args.file.exists():
+            download_cedict(args.file)
+        else:
+            print(f"CC-CEDICT archive already exists at {args.file}")
+        return
     import_cedict(args.file, force=args.force)
 
 

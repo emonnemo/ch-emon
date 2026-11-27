@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://localhost:5432/chemon"
     cors_origins: str = "http://localhost:3000"
+    cors_origin_regex: str | None = None
     jwt_secret: str = "ch-emon-local-dev-secret-change-in-production"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 30  # 30 days
@@ -13,6 +14,16 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def sqlalchemy_database_url(self) -> str:
+        """Normalize postgres:// or postgresql:// URLs (e.g. from Supabase) to psycopg3 driver."""
+        url = self.database_url.strip()
+        if url.startswith("postgres://"):
+            return "postgresql+psycopg://" + url[len("postgres://") :]
+        if url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + url[len("postgresql://") :]
+        return url
 
     @property
     def cors_origin_list(self) -> list[str]:
