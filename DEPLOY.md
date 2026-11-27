@@ -1,48 +1,72 @@
-# Deploying `ch-emon` (Option A: Vercel + Supabase + Docker Backend)
+# Deploying `ch-emon`
 
-This setup keeps 100% of the local Chinese NLP (`jieba`, `pypinyin`, CC-CEDICT, `PyMuPDF`, `ebooklib`, and offline `ctranslate2` `zh → en` translation) with **$0/month** free-tier options.
+`ch-emon` uses ~420 MB RAM for the backend (`jieba` + 125k CC-CEDICT + offline `ctranslate2` `zh → en` neural translator) and ~100 MB RAM for Next.js.
 
 ---
 
-## 1. Database — Supabase (Free Tier)
+## Option 1 (Recommended): Self-Host on Ubuntu Server + Supabase PostgreSQL
 
-1. Create a new project on [Supabase](https://supabase.com/).
-2. Open **Project Settings → Database → Connection string** (or click **Connect** in the top bar).
-3. Copy the **Session Pooler** URI (recommended for IPv4 compatibility on Docker hosts; Transaction Pooler on port `6543` also works!):
+Always-on, **$0/month**, zero cold sleep, and no upload size limits.
+
+### 1. Prepare Supabase
+1. Create a project on [Supabase](https://supabase.com/).
+2. Click **Connect** → copy the **Session Pooler** URI (IPv4-compatible):
    ```text
-   postgresql://postgres.<project-ref>:<YOUR_DB_PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres
+   postgresql://postgres.<project-ref>:<PASSWORD>@aws-0-<region>.pooler.supabase.com:5432/postgres
    ```
-   *(No need to change `postgresql://` — the backend automatically normalizes it to `postgresql+psycopg://`.)*
+   *(The backend automatically converts `postgresql://` to `postgresql+psycopg://`.)*
+
+### 2. Deploy on Ubuntu Server
+Make sure Docker & Docker Compose are installed on Ubuntu, then run:
+
+```bash
+git clone https://github.com/emonnemo/ch-emon.git
+cd ch-emon
+
+cp .env.prod.example .env.prod
+# Edit .env.prod and paste your Supabase DATABASE_URL + a random JWT_SECRET (openssl rand -hex 32)
+nano .env.prod
+
+# Start both Frontend (:3000) and Backend (:8000)
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+* On **first boot**, `backend/entrypoint.sh` automatically runs `alembic upgrade head` and seeds all ~125k CC-CEDICT entries into Supabase (takes ~15–30s once; skipped on future restarts).
+* Watch startup logs with:
+  ```bash
+  docker compose -f docker-compose.prod.yml logs -f backend
+  ```
+* Open `http://<your-ubuntu-ip>:3000` — because `NEXT_PUBLIC_API_URL=same-origin` proxies `/api/*` directly to `backend:7860` inside Docker, you only need **one port (`3000`)** and zero CORS tweaks!
+
+### 3. Accessing Remotely (Phone / Outside Home Network)
+* **Private (easiest, no domain needed):** Install [Tailscale](https://tailscale.com/) on Ubuntu + your phone/laptop, then access `http://<ubuntu-tailscale-name>:3000` (or enable HTTPS via `tailscale serve 3000`).
+* **Public HTTPS (no router port forwarding):** Point a free **Cloudflare Tunnel (`cloudflared`)** at `http://localhost:3000`.
+
+### 4. Updating Later
+```bash
+cd ch-emon
+git pull
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
 
 ---
 
-## 2. Backend — Docker Host (Hugging Face Spaces Free *or* Railway)
+## Option 2: Ubuntu Backend + Vercel Free Frontend
 
-The included [backend/Dockerfile](backend/Dockerfile) pre-bundles CC-CEDICT and the offline `zh → en` neural model at build time. On startup, [backend/entrypoint.sh](backend/entrypoint.sh) automatically runs `alembic upgrade head` and seeds the 125k CC-CEDICT rows into Supabase (idempotent — skipped on subsequent restarts).
+If you want the frontend served from Vercel's global CDN while your Ubuntu server runs the Python NLP backend:
 
-### Option 2A: Hugging Face Spaces (Free — 16 GB RAM / 2 vCPU)
-1. Go to [huggingface.co/new-space](https://huggingface.co/new-space), create a **Docker (Blank)** Space (e.g. `ch-emon-api`).
-2. Push the `backend/` folder contents to your Space repo (or link it).
-3. In your Space **Settings → Variables and secrets**, add:
-   * **Secret** `DATABASE_URL`: your Supabase connection URI from Step 1
-   * **Secret** `JWT_SECRET`: a long random string (e.g. `openssl rand -hex 32`)
-   * **Variable** `CORS_ORIGINS`: `https://<your-vercel-app>.vercel.app,http://localhost:3000`
-   * **Variable** `CORS_ORIGIN_REGEX` *(optional)*: `https://.*\.vercel\.app`
-4. Once running, verify `https://<your-hf-username>-ch-emon-api.hf.space/api/health` returns `{"status":"ok","dictionary_entries":125479}`.
-
-### Option 2B: Railway (Always-on, no idle sleep)
-1. Create a new project on [Railway](https://railway.app/) → **Deploy from GitHub repo** → select `emonnemo/ch-emon`.
-2. Set **Root Directory** to `backend` (Railway auto-detects `backend/Dockerfile`).
-3. Add environment variables: `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, and optional `CORS_ORIGIN_REGEX`.
-4. Generate a public domain in Railway Networking settings and verify `/api/health`.
+1. On Ubuntu, start **only** the backend:
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build backend
+   ```
+2. Expose Ubuntu port `8000` over HTTPS (e.g., via Cloudflare Tunnel → `https://api.yourdomain.com`).
+3. Make sure `.env.prod` has `CORS_ORIGIN_REGEX=https://.*\.vercel\.app` (or your exact Vercel domain in `CORS_ORIGINS`), then restart `backend`.
+4. Go to [vercel.com/new](https://vercel.com/new), import **`emonnemo/ch-emon`**, set **Root Directory** = `frontend`, and add:
+   * `NEXT_PUBLIC_API_URL` = `https://api.yourdomain.com` (no trailing slash)
 
 ---
 
-## 3. Frontend — Vercel (Free Tier)
+## Option 3: 100% Cloud (Render Free + Vercel Free + Supabase)
 
-1. Go to [vercel.com/new](https://vercel.com/new) and import **`emonnemo/ch-emon`**.
-2. Set **Root Directory** to `frontend`.
-3. Add one Environment Variable:
-   * `NEXT_PUBLIC_API_URL` = your live backend URL from Step 2 (no trailing slash, e.g. `https://<your-space>.hf.space` or `https://<your-app>.up.railway.app`).
-4. Click **Deploy**!
-5. Copy your Vercel production URL (e.g. `https://ch-emon.vercel.app`) back into your backend's `CORS_ORIGINS` variable if you haven't already.
+1. **Render:** Create a **Web Service** from `emonnemo/ch-emon` with **Root Directory** = `backend`, **Runtime** = `Docker`, **Instance Type** = `Free`, and set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`.
+2. **Vercel:** Import `emonnemo/ch-emon` with **Root Directory** = `frontend` and `NEXT_PUBLIC_API_URL=https://<your-render-app>.onrender.com`.

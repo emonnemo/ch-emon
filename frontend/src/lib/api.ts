@@ -120,8 +120,11 @@ export interface ReviewStats {
   review_count: number;
 }
 
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL?.trim();
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
+  RAW_API_URL === "same-origin" || RAW_API_URL === "/"
+    ? ""
+    : RAW_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
 const TOKEN_KEY = "chemon_access_token";
 

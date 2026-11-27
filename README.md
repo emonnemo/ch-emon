@@ -54,7 +54,7 @@ Open [http://localhost:3000](http://localhost:3000), create an account, and uplo
 
 ## Deployment
 
-See [DEPLOY.md](DEPLOY.md) for step-by-step instructions to deploy the frontend on **Vercel Free**, PostgreSQL on **Supabase**, and the Python NLP backend via [backend/Dockerfile](backend/Dockerfile) on **Hugging Face Spaces (Free 16 GB RAM)** or **Railway**.
+See [DEPLOY.md](DEPLOY.md) for step-by-step instructions to self-host with [docker-compose.prod.yml](docker-compose.prod.yml) on an Ubuntu server + **Supabase** PostgreSQL (or split across **Vercel** + **Render Free**).
 
 ## Running Tests
 

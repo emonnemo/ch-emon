@@ -15,6 +15,7 @@ frontend/out/
 
 # Data & Env
 .env
+.env.prod
 backend/.env
 frontend/.env.local
 backend/data/

@@ -1,0 +1,45 @@
+# Production Docker Compose for Ubuntu Server (works with Supabase PostgreSQL)
+#
+# Full stack (frontend on :3000 + backend on :8000):
+#   cp .env.prod.example .env.prod   # fill in DATABASE_URL and JWT_SECRET
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+#
+# Backend only (if hosting frontend on Vercel):
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build backend
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: chemon-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env.prod}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.prod}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+      PORT: 7860
+    ports:
+      - "${BACKEND_PORT:-8000}:7860"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:7860/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-same-origin}
+    container_name: chemon-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_INTERNAL_URL: http://backend:7860
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
